@@ -33,10 +33,10 @@ La compilation TypeScript précède le build Vite. Les fichiers à héberger son
 Prérequis : Docker et Docker Compose. Depuis la racine du projet :
 
 ```sh
-docker compose up --build -d
+docker compose up --build -d --remove-orphans
 ```
 
-Ouvrir **http://localhost:8080**. L’image compile l’application avec Node.js 22 et `npm ci`, puis sert uniquement les fichiers de production avec [NGINX Unprivileged](https://github.com/nginx/docker-nginx-unprivileged). Le conteneur fonctionne sans utilisateur root, avec un système de fichiers en lecture seule et un répertoire temporaire en mémoire. Son état de santé vérifie que la page est accessible.
+Ouvrir **http://localhost:8080**. L’image compile l’application avec Node.js 22 et `npm ci`, puis un seul processus Node.js sert les fichiers de production et l’API d’abonnement sur le même port. Le conteneur fonctionne sans utilisateur root, avec un système de fichiers en lecture seule et un volume inscriptible sur `/data`. Son état de santé vérifie l’API, la présence de l’interface et l’accès au stockage des abonnements.
 
 ```sh
 docker compose ps
@@ -52,23 +52,34 @@ TEMPO_PORT=8081 docker compose up --build -d
 
 Par défaut, le serveur est accessible uniquement depuis cette machine (`127.0.0.1`). Pour écouter également sur les interfaces réseau, définir `TEMPO_BIND_ADDRESS=0.0.0.0`. Sur un domaine ou un téléphone, placer le service derrière un reverse proxy HTTPS : le conteneur sert du HTTP sur son port 8080 et l’installation PWA ainsi que le cache hors connexion nécessitent un contexte sécurisé. Héberger l’application à la racine du domaine, comme pour `dist/`.
 
-Les données originales et documents restent dans IndexedDB. Compose lance également le service `subscriptions`, accessible uniquement via NGINX, et conserve les flux activés dans le volume `subscriptions`. Ne pas supprimer ce volume lors d’une mise à jour. Changer de domaine ou de port change l’espace de stockage et l’adresse d’abonnement : révoquer d’abord l’ancien lien, exporter une sauvegarde, puis la restaurer et créer un nouvel abonnement à la nouvelle adresse.
+Les données originales et documents restent dans IndexedDB. Le service unique `tempo` conserve les flux activés dans le volume `subscriptions`, monté sur `/data`. Le nom du volume est conservé pour reprendre les abonnements de l’ancienne installation à deux conteneurs ; `--remove-orphans` retire l’ancien service séparé. Ne pas supprimer ce volume lors d’une mise à jour. Changer de domaine ou de port public change l’espace de stockage et l’adresse d’abonnement : révoquer d’abord l’ancien lien, exporter une sauvegarde, puis la restaurer et créer un nouvel abonnement à la nouvelle adresse.
 
 Pour reconstruire après une modification ou récupérer les mises à jour des images de base :
 
 ```sh
 docker compose build --pull
-docker compose up -d
+docker compose up -d --remove-orphans
 ```
 
 Le HTML et les ressources PWA sont revalidés ; les fichiers JavaScript/CSS portant une empreinte Vite sont mis en cache durablement. Comme pour tout hébergement de Tempo, une nouvelle version du service worker s’active après fermeture des anciennes fenêtres de l’application.
 
-Sans Compose, le conteneur suivant sert l’application locale et l’import/export manuel. L’abonnement nécessite aussi le service `subscriptions` sur un réseau Docker commun ; utiliser Compose pour ce parcours :
+Le Dockerfile seul fournit également l’application complète, abonnements compris :
 
 ```sh
 docker build -t tempo-calendar:local .
-docker run --rm -p 127.0.0.1:8080:8080 --read-only --tmpfs /tmp:size=16m,mode=1777 tempo-calendar:local
+docker run --rm -p 127.0.0.1:8080:8080 --read-only --mount type=volume,source=tempo-subscriptions,target=/data tempo-calendar:local
 ```
+
+### Hébergement avec le Dockerfile seul
+
+Pour un déploiement Dockerfile sur Coolify, Dokploy ou un hébergeur équivalent :
+
+1. Construire le **Dockerfile à la racine** du dépôt et conserver sa commande de démarrage.
+2. Utiliser le **port interne 8080** et transmettre tout le domaine HTTPS au conteneur, y compris `/api/`. Si la plateforme définit `PORT`, le serveur et son contrôle de santé utilisent cette valeur.
+3. Ajouter un **volume persistant avec `/data` comme destination**, inscriptible par l’utilisateur du conteneur (UID/GID 1000). Réutiliser ce même volume aux redéploiements.
+4. Reconstruire et redéployer, puis vérifier que **`/api/health` renvoie `{"subscriptions":true}`**. Retourner dans Tempo et cliquer sur « Publier maintenant » si une activation avait échoué.
+
+L’ancien Dockerfile ne contenait que l’interface NGINX et exigeait un second service d’abonnement : en déploiement Dockerfile seul, cela produisait « L’abonnement n’est pas disponible sur cet hébergement ». Le Dockerfile actuel inclut les deux fonctions. Aucun serveur supplémentaire ni configuration de proxy interne n’est nécessaire.
 
 ## Utiliser Tempo
 
@@ -106,7 +117,7 @@ Tempo publie tous les événements enregistrés, même masqués par les filtres,
 
 La publication se relance après chaque changement d’événements, au retour du réseau, à la réouverture et périodiquement lorsque l’app est visible. Les changements hors connexion restent dans IndexedDB et sont envoyés au prochain lancement connecté. **Une PWA fermée ne publie pas en arrière-plan.** « Publier maintenant » force une transmission au serveur, pas une actualisation de l’iPhone. Une erreur réseau ne bloque pas l’enregistrement local ; elle apparaît dans les réglages et une notification.
 
-L’hébergement doit servir le site et `/api/` à la racine d’une adresse **HTTPS joignable depuis l’iPhone et les services Apple**, sans écran de connexion devant le flux. Un hébergement statique seul ne suffit pas. Compose fournit les deux services ; le reverse proxy HTTPS doit transmettre `/api/` au même NGINX que le site. Désactiver les journaux d’URL pour `/api/calendars/` également dans tout proxy amont, car les liens donnent accès aux événements.
+L’hébergement doit servir le site et `/api/` à la racine d’une adresse **HTTPS joignable depuis l’iPhone et les services Apple**, sans écran de connexion devant le flux. Un hébergement statique seul ne suffit pas. Le Dockerfile et Compose fournissent tous deux un conteneur complet ; le reverse proxy HTTPS doit transmettre `/api/` au même port que le site. Le serveur ne journalise pas les requêtes. Désactiver les journaux d’URL pour `/api/calendars/` également dans tout proxy amont, car les liens donnent accès aux événements.
 
 La clé de publication aléatoire de 256 bits reste dans le stockage local du navigateur et ne figure pas dans le lien Apple. Le serveur utilise son empreinte SHA-256 comme identifiant de lecture. Quiconque possède le lien peut lire le calendrier ; cette URL ne permet pas de modifier le flux. **Désactiver l’abonnement → Révoquer le lien** efface la copie serveur et rend l’ancienne URL inutilisable. Retirer ensuite l’abonnement dans Apple pour effacer ses copies locales. Une recréation utilise un nouveau lien.
 
@@ -148,9 +159,9 @@ npm run build
 npm run test:e2e
 ```
 
-`npm test` exécute les tests Vitest du moteur calendrier, des échanges `.ics`, d’IndexedDB avec `fake-indexeddb`, du service worker et du serveur d’abonnement (serveurs HTTP temporaires sur loopback). `npm run test:watch` les relance pendant le développement.
+`npm test` exécute les tests Vitest du moteur calendrier, des échanges `.ics`, d’IndexedDB avec `fake-indexeddb`, du service worker et du serveur de production (serveurs HTTP temporaires sur loopback). `npm run test:watch` les relance pendant le développement.
 
-Les tests Playwright lancent automatiquement l’aperçu de production sur `127.0.0.1:4173` et un service d’abonnement sur `127.0.0.1:3001`, avec stockage dans `test-results/subscriptions/`. Libérer le port 3001 et exécuter le build au préalable. La configuration actuelle utilise Chrome dans `/usr/bin/google-chrome`. Pour un autre emplacement, définir `PLAYWRIGHT_CHROMIUM_EXECUTABLE` avant de lancer les tests, par exemple :
+Les tests Playwright lancent automatiquement le même serveur que le Dockerfile sur `127.0.0.1:4173`, avec interface de production et API, et stockent les flux dans `test-results/subscriptions/`. Libérer le port 4173 et exécuter le build au préalable. La configuration actuelle utilise Chrome dans `/usr/bin/google-chrome`. Pour un autre emplacement, définir `PLAYWRIGHT_CHROMIUM_EXECUTABLE` avant de lancer les tests, par exemple :
 
 ```sh
 PLAYWRIGHT_CHROMIUM_EXECUTABLE="/chemin/vers/chrome" npm run test:e2e
@@ -158,7 +169,7 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE="/chemin/vers/chrome" npm run test:e2e
 
 Ces tests nécessitent la possibilité de démarrer un serveur local et un navigateur. Ils ne remplacent pas la recette sur un iPhone physique, notamment l’installation, l’ouverture hors connexion et l’import dans Calendrier Apple.
 
-La validation du 13 novembre 2026 comprend **67 tests Vitest**, **20 parcours navigateur Chrome** et une compilation réussie. Elle couvre « Aucun », les thèmes, la publication après activation, les ajouts/modifications/suppressions, la reprise réseau, les onglets concurrents, la révocation et le renouvellement du lien. Les deux services Docker ont été construits et démarrés dans une instance de test : proxy NGINX, persistance après redémarrage, révocation, refus d’une ancienne requête et affichage à 390 px ont été vérifiés. L’hébergement HTTPS, le rendu de la barre d’état dans la PWA installée, l’abonnement et ses alertes sur un iPhone physique restent à vérifier.
+La validation du 13 novembre 2026 comprend **72 tests Vitest**, **20 parcours navigateur Chrome** exécutés avec le serveur de production unique et une compilation réussie. Elle couvre « Aucun », les thèmes, la publication après activation, les ajouts/modifications/suppressions, la reprise réseau, les onglets concurrents, la révocation et le renouvellement du lien. Le Dockerfile seul a été construit et testé : interface et API sur le même port, gzip/cache PWA, utilisateur non root, persistance après recréation du conteneur avec le même volume, port configurable et révocation. Les routes privées, fichiers absents et tentatives de sortie du dossier statique sont également testés. L’hébergement HTTPS, le rendu de la barre d’état dans la PWA installée, l’abonnement et ses alertes sur un iPhone physique restent à vérifier.
 
 ## Architecture
 
@@ -171,10 +182,10 @@ La validation du 13 novembre 2026 comprend **67 tests Vitest**, **20 parcours na
 | `src/lib/ics.ts` | Import/export iCalendar, fuseaux et alarmes compatibles |
 | `src/lib/storage.ts` | IndexedDB, documents, validation, sauvegardes et détection des écritures concurrentes |
 | `src/lib/subscription.ts` | Publication facultative, reprise réseau, sérialisation entre onglets et révocation |
-| `server/subscriptions.mjs`, `server/Dockerfile` | Flux privés, stockage persistant, limites et service Node.js |
+| `server/subscriptions.mjs`, `server/static.mjs` | Serveur Node.js commun pour l’interface, les flux privés, le stockage persistant et les limites |
 | `public/` | Manifeste PWA, icônes et modèle du service worker |
 | `vite.config.ts` | Build et génération du pré-cache versionné à partir des fichiers produits |
-| `Dockerfile`, `compose.yaml`, `docker/nginx.conf` | Image de production, lancement Docker et cache HTTP des ressources PWA |
+| `Dockerfile`, `compose.yaml` | Image de production complète, lancement Docker et volume persistant des abonnements |
 | `tests/`, `tests/e2e/` | Tests métier et tests navigateur |
 
 React et TypeScript portent l’interface ; Vite produit les fichiers statiques. `server/subscriptions.mjs` sert les abonnements activés, sans compte Apple ni EventKit. Aucun service distant n’est requis pour l’usage local et l’import/export manuel.

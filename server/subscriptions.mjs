@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, readdir, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
 import { createServer } from 'node:http';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { serveApplication } from './static.mjs';
 
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const exists = async (path) => stat(path).then(() => true, error => {
@@ -13,6 +15,7 @@ const exists = async (path) => stat(path).then(() => true, error => {
 /** No Apple credentials: the read URL is a hash of a separate 256-bit write key. */
 export function createSubscriptionServer({
   directory = resolve(process.env.TEMPO_FEED_DIR || '.tempo-feeds'),
+  staticDirectory = process.env.TEMPO_STATIC_DIR,
   maxBytes = 10 * 1024 * 1024,
   maxTotalBytes = 100 * 1024 * 1024,
   maxFeeds = 1000,
@@ -34,9 +37,16 @@ export function createSubscriptionServer({
     res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
     try {
       const path = new URL(req.url, 'http://localhost').pathname;
-      if (path === '/api/health' && req.method === 'GET') {
+      if (staticDirectory && path !== '/api' && !path.startsWith('/api/')) {
+        await serveApplication(req, res, path, staticDirectory);
+        return;
+      }
+      if (path === '/api/health' && ['GET', 'HEAD'].includes(req.method)) {
+        await mkdir(directory, { recursive: true, mode: 0o700 });
+        await access(directory, constants.W_OK);
+        if (staticDirectory) await access(join(staticDirectory, 'index.html'), constants.R_OK);
         res.setHeader('Content-Type', 'application/json');
-        res.end('{"subscriptions":true}');
+        res.end(req.method === 'HEAD' ? undefined : '{"subscriptions":true}');
         return;
       }
       const match = /^\/api\/calendars\/([a-f0-9]{64})\.ics$/.exec(path);
@@ -132,8 +142,16 @@ export function createSubscriptionServer({
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
-  const port = Number(process.env.TEMPO_FEED_PORT || 3001);
-  createSubscriptionServer().listen(port, process.env.TEMPO_FEED_HOST || '127.0.0.1', () => {
-    console.log(`Tempo subscription service listening on port ${port}`);
+  const port = Number(process.env.PORT || process.env.TEMPO_FEED_PORT || 3001);
+  const server = createSubscriptionServer();
+  server.listen(port, process.env.TEMPO_FEED_HOST || '127.0.0.1', () => {
+    console.log(`Tempo listening on port ${port}`);
   });
+  // Drain in-flight publications when the hosting platform restarts the container.
+  const shutdown = () => {
+    server.close(() => process.exit(0));
+    setTimeout(() => process.exit(1), 8000).unref();
+  };
+  process.once('SIGTERM', shutdown);
+  process.once('SIGINT', shutdown);
 }

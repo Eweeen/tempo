@@ -24,16 +24,16 @@ export default defineConfig({
   },
   // Production preview is essential: service workers are disabled in dev mode.
   // Run `npm run build` before these tests so cached assets match current source.
-  webServer: [{
+  webServer: {
     command: 'npm run server',
-    url: 'http://127.0.0.1:3001/api/health',
-    env: { TEMPO_FEED_DIR: resolve('test-results/subscriptions') },
+    url: 'http://127.0.0.1:4173/api/health',
+    env: {
+      PORT: '4173',
+      TEMPO_FEED_HOST: '127.0.0.1',
+      TEMPO_FEED_DIR: resolve('test-results/subscriptions'),
+      TEMPO_STATIC_DIR: resolve('dist'),
+    },
     reuseExistingServer: false,
     timeout: 30_000,
-  }, {
-    command: 'npm run preview -- --host 127.0.0.1 --port 4173 --strictPort',
-    url: 'http://127.0.0.1:4173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 30_000,
-  }],
+  },
 });
