@@ -107,13 +107,13 @@ const PARIS_ZONE = [
   "END:VTIMEZONE",
 ];
 
-export function exportCalendar(events: CalendarEvent[]): string {
+export function exportCalendar(events: CalendarEvent[], subscription = false): string {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
     "PRODID:-//Tempo//Calendrier local//FR",
     "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
+    ...(subscription ? ["X-WR-CALNAME:Tempo", "REFRESH-INTERVAL;VALUE=DURATION:PT1H", "X-PUBLISHED-TTL:PT1H"] : ["METHOD:PUBLISH"]),
   ];
   if (
     events.some(
@@ -137,7 +137,8 @@ export function exportCalendar(events: CalendarEvent[]): string {
     lines.push(
       "BEGIN:VEVENT",
       `UID:${escapeText(event.uid || `${event.id}@tempo.local`)}`,
-      `DTSTAMP:${compactUTC(new Date())}`,
+      `DTSTAMP:${compactUTC(new Date(event.updatedAt))}`,
+      `LAST-MODIFIED:${compactUTC(new Date(event.updatedAt))}`,
       `SUMMARY:${escapeText(event.title)}`,
     );
     if (event.allDay)

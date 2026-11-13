@@ -33,6 +33,7 @@ import {
   saveData,
 } from "./lib/storage";
 import { exportCalendar } from "./lib/ics";
+import { useCalendarSubscription } from "./lib/subscription";
 import { downloadBlob, EventEditor, newEvent } from "./components/EventEditor";
 import { WorkPlanner } from "./components/WorkPlanner";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -260,6 +261,7 @@ function WeekView({
 
 export default function App() {
   const [data, setData] = useState<AppData | null>(null);
+  const subscription = useCalendarSubscription(data?.events);
   const dataRef = useRef<AppData | null>(null);
   const [loadError, setLoadError] = useState("");
   const [selected, setSelected] = useState(new Date());
@@ -282,6 +284,9 @@ export default function App() {
   const [online, setOnline] = useState(navigator.onLine);
   const [offlineReady, setOfflineReady] = useState(false);
   const { notify } = useToast();
+  useEffect(() => {
+    if (subscription.error) notify(subscription.error, "error");
+  }, [subscription.error, notify]);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const receiveData = (next: AppData) => {
@@ -985,6 +990,7 @@ export default function App() {
       {modal && modal !== "work" && modal !== "calendars" && (
         <SettingsPanel
           data={data}
+          subscription={subscription}
           initialTab={
             modal === "data"
               ? "data"

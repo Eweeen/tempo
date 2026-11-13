@@ -26,10 +26,13 @@ import { dateKey } from "../lib/calendar";
 import { Dialog } from "./Dialog";
 import { useToast } from "./Toast";
 import { ALERTS, downloadBlob, ICONS } from "./EventEditor";
+import { CalendarSubscriptionPanel } from "./CalendarSubscriptionPanel";
+import type { CalendarSubscription } from "../lib/subscription";
 
 type Tab = "general" | "categories" | "data" | "help";
 export function SettingsPanel({
   data,
+  subscription,
   initialTab = "general",
   onClose,
   onChange,
@@ -37,6 +40,7 @@ export function SettingsPanel({
   onExport,
 }: {
   data: AppData;
+  subscription: CalendarSubscription;
   initialTab?: Tab;
   onClose: () => void;
   onChange: (data: AppData) => Promise<void>;
@@ -388,10 +392,11 @@ export function SettingsPanel({
               <div className="storage-card">
                 <HardDrive size={28} />
                 <div>
-                  <strong>Vos données restent ici.</strong>
+                  <strong>Vos données sont enregistrées ici.</strong>
                   <p>
                     Événements et documents sont enregistrés dans le stockage
-                    privé de ce navigateur. Aucun compte requis.
+                    privé de ce navigateur. Si vous activez l’abonnement Apple,
+                    une copie des événements est aussi publiée sur le serveur.
                   </p>
                   {storage && (
                     <small>
@@ -427,7 +432,8 @@ export function SettingsPanel({
                   ? "Stockage persistant accordé"
                   : "Demander un stockage persistant"}
               </button>
-              <h3>Échanger avec Calendrier Apple</h3>
+              <CalendarSubscriptionPanel subscription={subscription} />
+              <h3>Échanger un fichier avec Calendrier Apple</h3>
               <p className="muted">
                 Import / export manuel au format .ics, avec les horaires,
                 répétitions et rappels compatibles. Les documents restent dans
@@ -599,7 +605,14 @@ export function SettingsPanel({
                   préparer l’accès hors ligne.
                 </li>
               </ol>
-              <h4>Ajouter vos événements à Calendrier Apple</h4>
+              <p className="notice">
+                Si le haut de la PWA reste flou après la mise à jour, sauvegardez
+                vos données dans « Mes données » et révoquez l’abonnement éventuel
+                avant de retirer puis réinstaller l’icône. iOS peut conserver
+                le style de barre d’état choisi à l’installation.
+              </p>
+              <CalendarSubscriptionPanel subscription={subscription} />
+              <h4>Importer manuellement dans Calendrier Apple</h4>
               <ol className="help-steps">
                 <li>
                   Dans « Mes données », exportez vos événements au format{" "}

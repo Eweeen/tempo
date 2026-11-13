@@ -2,9 +2,9 @@
 
 Tempo est un calendrier personnel en français, installable en PWA. Il permet de préparer une semaine de travail en une seule opération, puis de gérer chaque poste indépendamment. Les événements, catégories, préférences et documents restent dans le navigateur de l’utilisateur.
 
-Le projet ne contient ni serveur de données personnelles, ni authentification, ni synchronisation distante. Les échanges avec Calendrier Apple passent par des fichiers `.ics` importés ou exportés manuellement.
+Sans abonnement, les données restent locales. Un service Node.js facultatif permet de publier un calendrier `.ics` privé auquel Calendrier Apple peut s’abonner. La publication se fait uniquement après activation dans l’application ; les documents ne sont jamais envoyés. L’import/export manuel reste disponible.
 
-Le périmètre détaillé se trouve dans [CAHIER_DES_CHARGES.md](./CAHIER_DES_CHARGES.md). Les fonctionnalités réalisées, les résultats de validation et la recette iPhone restante sont suivis dans [AVANCEMENT.md](./AVANCEMENT.md).
+Le périmètre détaillé se trouve dans [CAHIER_DES_CHARGES.md](./CAHIER_DES_CHARGES.md). Les résultats de validation et les limites de la recette iPhone figurent ci-dessous.
 
 ## Démarrer en local
 
@@ -16,6 +16,8 @@ npm run dev
 ```
 
 Ouvrir l’adresse indiquée par Vite, généralement `http://localhost:5173`. Le service worker est désactivé en développement : ce mode ne valide pas le lancement hors connexion.
+
+Pour tester aussi l’abonnement, démarrer `npm run server` dans un second terminal. Vite et son aperçu transmettent `/api/` au service sur `127.0.0.1:3001`. Les flux sont conservés dans `.tempo-feeds/` (ignoré par Git). `TEMPO_FEED_DIR`, `TEMPO_FEED_HOST` et `TEMPO_FEED_PORT` configurent le service ; adapter aussi le proxy Vite si le port change.
 
 Pour construire et servir la version de production :
 
@@ -50,7 +52,7 @@ TEMPO_PORT=8081 docker compose up --build -d
 
 Par défaut, le serveur est accessible uniquement depuis cette machine (`127.0.0.1`). Pour écouter également sur les interfaces réseau, définir `TEMPO_BIND_ADDRESS=0.0.0.0`. Sur un domaine ou un téléphone, placer le service derrière un reverse proxy HTTPS : le conteneur sert du HTTP sur son port 8080 et l’installation PWA ainsi que le cache hors connexion nécessitent un contexte sécurisé. Héberger l’application à la racine du domaine, comme pour `dist/`.
 
-Les événements et documents restent dans IndexedDB côté navigateur : aucun volume de données ni base de données serveur n’est nécessaire. Changer de domaine ou de port change l’espace de stockage du navigateur ; exporter une sauvegarde depuis l’ancienne adresse puis la restaurer sur la nouvelle permet de transférer ses données.
+Les données originales et documents restent dans IndexedDB. Compose lance également le service `subscriptions`, accessible uniquement via NGINX, et conserve les flux activés dans le volume `subscriptions`. Ne pas supprimer ce volume lors d’une mise à jour. Changer de domaine ou de port change l’espace de stockage et l’adresse d’abonnement : révoquer d’abord l’ancien lien, exporter une sauvegarde, puis la restaurer et créer un nouvel abonnement à la nouvelle adresse.
 
 Pour reconstruire après une modification ou récupérer les mises à jour des images de base :
 
@@ -61,7 +63,7 @@ docker compose up -d
 
 Le HTML et les ressources PWA sont revalidés ; les fichiers JavaScript/CSS portant une empreinte Vite sont mis en cache durablement. Comme pour tout hébergement de Tempo, une nouvelle version du service worker s’active après fermeture des anciennes fenêtres de l’application.
 
-Sans Compose :
+Sans Compose, le conteneur suivant sert l’application locale et l’import/export manuel. L’abonnement nécessite aussi le service `subscriptions` sur un réseau Docker commun ; utiliser Compose pour ce parcours :
 
 ```sh
 docker build -t tempo-calendar:local .
@@ -90,9 +92,29 @@ Le service worker de production précharge la page, le JavaScript, les styles, l
 
 Une mise à jour attend la fermeture des onglets et fenêtres Tempo utilisant l’ancienne version. Fermer toutes les instances puis rouvrir l’application permet de passer à la nouvelle version sans mélanger ses fichiers avec ceux de la précédente.
 
-Les barres supérieure et inférieure ont un fond opaque assorti au thème, également communiqué par `theme-color`. Le manifeste utilise le blanc du thème initial. Le style Apple de barre d’état n’est pas forcé : [WebKit recommande de laisser iOS reprendre la couleur de la page](https://bugs.webkit.org/show_bug.cgi?id=317153#c2). Un [problème de barre système translucide est encore signalé sur iOS 27](https://bugs.webkit.org/show_bug.cgi?id=301994#c17) ; ces réglages web ne garantissent pas la suppression de cet effet natif. Le rendu de la PWA sur iOS 27.0.1 reste à vérifier sur un iPhone réel après mise à jour et relance complète.
+Les barres ont un fond opaque assorti au thème. Le style Apple est explicitement `default` ; un véritable élément DOM fixe de 1 px, à `top: 0`, fournit la couleur de fond à iOS, et l’en-tête est `sticky`. Cette adaptation suit les essais du [fil PWA fourni](https://www.reddit.com/r/PWA/comments/1w5mqj1/ios_27_beta_blurs_the_top_edge_of_installed_pwas/), dont les témoignages divergent selon la version d’iOS. Le [signalement WebKit](https://bugs.webkit.org/show_bug.cgi?id=301994#c17) confirme que des problèmes natifs subsistent ; le correctif reste à valider sur un iPhone réel.
+
+iOS peut conserver la configuration de barre d’état de l’installation précédente. Pour tester une nouvelle installation, **sauvegarder les données et révoquer l’abonnement éventuel avant de retirer l’icône**, puis ajouter à nouveau Tempo depuis Safari. Restaurer les données et recréer l’abonnement si nécessaire. Certaines versions d’iOS peuvent aussi exiger une relance complète après un changement de thème système.
 
 ## Échanger avec Calendrier Apple
+
+### Abonnement automatique
+
+Dans **Calendriers → Importer ou exporter → Abonnement Calendrier Apple**, choisir **Activer l’abonnement**, puis **S’abonner dans Calendrier Apple**. Le lien HTTPS peut aussi être copié dans **Calendrier → Calendriers → Ajouter un calendrier → Ajouter un abonnement**. Apple documente ces abonnements en lecture seule dans [son guide iPhone](https://support.apple.com/guide/iphone/use-multiple-calendars-iph3d1110d4/27/ios/27).
+
+Tempo publie tous les événements enregistrés, même masqués par les filtres, avec titres, horaires, répétitions, notes, lieux, liens et rappels. Les documents sont exclus. Ajouts, modifications et suppressions mettent à jour le même flux, avec des UID stables et `LAST-MODIFIED`. iOS choisit la fréquence de récupération ; le flux suggère une heure mais ne peut pas imposer une actualisation immédiate. Modifier les événements dans Tempo et vérifier les alertes dans les options Apple de l’abonnement.
+
+La publication se relance après chaque changement d’événements, au retour du réseau, à la réouverture et périodiquement lorsque l’app est visible. Les changements hors connexion restent dans IndexedDB et sont envoyés au prochain lancement connecté. **Une PWA fermée ne publie pas en arrière-plan.** « Publier maintenant » force une transmission au serveur, pas une actualisation de l’iPhone. Une erreur réseau ne bloque pas l’enregistrement local ; elle apparaît dans les réglages et une notification.
+
+L’hébergement doit servir le site et `/api/` à la racine d’une adresse **HTTPS joignable depuis l’iPhone et les services Apple**, sans écran de connexion devant le flux. Un hébergement statique seul ne suffit pas. Compose fournit les deux services ; le reverse proxy HTTPS doit transmettre `/api/` au même NGINX que le site. Désactiver les journaux d’URL pour `/api/calendars/` également dans tout proxy amont, car les liens donnent accès aux événements.
+
+La clé de publication aléatoire de 256 bits reste dans le stockage local du navigateur et ne figure pas dans le lien Apple. Le serveur utilise son empreinte SHA-256 comme identifiant de lecture. Quiconque possède le lien peut lire le calendrier ; cette URL ne permet pas de modifier le flux. **Désactiver l’abonnement → Révoquer le lien** efface la copie serveur et rend l’ancienne URL inutilisable. Retirer ensuite l’abonnement dans Apple pour effacer ses copies locales. Une recréation utilise un nouveau lien.
+
+Les clés d’abonnement ne figurent pas dans la sauvegarde JSON et ne sont pas synchronisées entre appareils. Révoquer l’abonnement avant d’effacer les données du navigateur ou de changer d’adresse. Si la clé est perdue, l’hébergeur doit supprimer le flux `.ics` correspondant et créer un fichier vide de même identifiant avec l’extension `.revoked`. Une restauration de sauvegarde remplace aussi le contenu du flux actif lors de la publication suivante.
+
+Le service fonctionne sans compte et sans dépendance Node supplémentaire, avec écritures atomiques dans le volume dédié. Limites par instance : 10 Mo par flux, 100 Mo au total, 1 000 identifiants (révoqués compris) et 120 requêtes d’écriture par minute. Il est prévu pour l’hébergement personnel de Tempo ; les quotas sont globaux. Les fichiers `.revoked` empêchent une requête retardée de recréer un flux supprimé et doivent être conservés. Les sauvegardes du volume contiennent des données personnelles lisibles.
+
+### Import/export manuel
 
 Dans **Calendriers → Importer ou exporter**, exporter les événements en `.ics`. Apple documente l’import depuis une pièce jointe dans **Mail sur iPhone** ; Calendrier sur Mac permet également d’importer et d’exporter des fichiers `.ics`. L’ouverture directe d’un téléchargement depuis Safari ou Fichiers et l’import de plusieurs événements doivent être vérifiés sur l’iPhone concerné. [Guide Apple iPhone](https://support.apple.com/fr-fr/guide/iphone/ipha0d932e96/ios), [guide Calendrier sur Mac](https://support.apple.com/guide/calendar/import-or-export-calendars-icl1023/mac).
 
@@ -126,9 +148,9 @@ npm run build
 npm run test:e2e
 ```
 
-`npm test` exécute les tests Vitest du moteur calendrier, des échanges `.ics`, d’IndexedDB avec `fake-indexeddb` et du service worker. `npm run test:watch` les relance pendant le développement.
+`npm test` exécute les tests Vitest du moteur calendrier, des échanges `.ics`, d’IndexedDB avec `fake-indexeddb`, du service worker et du serveur d’abonnement (serveurs HTTP temporaires sur loopback). `npm run test:watch` les relance pendant le développement.
 
-Les tests Playwright lancent automatiquement l’aperçu de production sur `127.0.0.1:4173` ; exécuter le build au préalable. La configuration actuelle utilise Chrome dans `/usr/bin/google-chrome`. Pour un autre emplacement, définir `PLAYWRIGHT_CHROMIUM_EXECUTABLE` avant de lancer les tests, par exemple :
+Les tests Playwright lancent automatiquement l’aperçu de production sur `127.0.0.1:4173` et un service d’abonnement sur `127.0.0.1:3001`, avec stockage dans `test-results/subscriptions/`. Libérer le port 3001 et exécuter le build au préalable. La configuration actuelle utilise Chrome dans `/usr/bin/google-chrome`. Pour un autre emplacement, définir `PLAYWRIGHT_CHROMIUM_EXECUTABLE` avant de lancer les tests, par exemple :
 
 ```sh
 PLAYWRIGHT_CHROMIUM_EXECUTABLE="/chemin/vers/chrome" npm run test:e2e
@@ -136,7 +158,7 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE="/chemin/vers/chrome" npm run test:e2e
 
 Ces tests nécessitent la possibilité de démarrer un serveur local et un navigateur. Ils ne remplacent pas la recette sur un iPhone physique, notamment l’installation, l’ouverture hors connexion et l’import dans Calendrier Apple.
 
-La dernière validation du 13 novembre 2026 comprend **14 parcours navigateur Chrome** et une compilation réussie, après ajout des années défilantes. Les gestes tactiles, le chargement des mois et des années dans les deux sens, le bandeau de semaine et les retours ont été testés ; les captures sur mobile à 390 px et ordinateur ont été vérifiées. Les **59 tests unitaires** ont réussi lors d’une étape précédente et n’ont pas été relancés pour cette dernière évolution d’interface. L’application n’est pas encore déployée ; l’hébergement HTTPS et la recette iPhone restent à effectuer. Le détail des parcours est consigné dans [AVANCEMENT.md](./AVANCEMENT.md).
+La validation du 13 novembre 2026 comprend **67 tests Vitest**, **20 parcours navigateur Chrome** et une compilation réussie. Elle couvre « Aucun », les thèmes, la publication après activation, les ajouts/modifications/suppressions, la reprise réseau, les onglets concurrents, la révocation et le renouvellement du lien. Les deux services Docker ont été construits et démarrés dans une instance de test : proxy NGINX, persistance après redémarrage, révocation, refus d’une ancienne requête et affichage à 390 px ont été vérifiés. L’hébergement HTTPS, le rendu de la barre d’état dans la PWA installée, l’abonnement et ses alertes sur un iPhone physique restent à vérifier.
 
 ## Architecture
 
@@ -148,9 +170,11 @@ La dernière validation du 13 novembre 2026 comprend **14 parcours navigateur Ch
 | `src/lib/calendar.ts` | Dates civiles, occurrences, lots de travail et jours fériés |
 | `src/lib/ics.ts` | Import/export iCalendar, fuseaux et alarmes compatibles |
 | `src/lib/storage.ts` | IndexedDB, documents, validation, sauvegardes et détection des écritures concurrentes |
+| `src/lib/subscription.ts` | Publication facultative, reprise réseau, sérialisation entre onglets et révocation |
+| `server/subscriptions.mjs`, `server/Dockerfile` | Flux privés, stockage persistant, limites et service Node.js |
 | `public/` | Manifeste PWA, icônes et modèle du service worker |
 | `vite.config.ts` | Build et génération du pré-cache versionné à partir des fichiers produits |
 | `Dockerfile`, `compose.yaml`, `docker/nginx.conf` | Image de production, lancement Docker et cache HTTP des ressources PWA |
 | `tests/`, `tests/e2e/` | Tests métier et tests navigateur |
 
-React et TypeScript portent l’interface ; Vite produit un site statique. Aucun secret, compte Apple, accès EventKit ou service distant n’est requis pour utiliser cette version.
+React et TypeScript portent l’interface ; Vite produit les fichiers statiques. `server/subscriptions.mjs` sert les abonnements activés, sans compte Apple ni EventKit. Aucun service distant n’est requis pour l’usage local et l’import/export manuel.

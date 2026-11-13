@@ -449,21 +449,22 @@ export function EventEditor({
               <span>
                 <Bell size={15} /> Rappels
               </span>
-              {event.alerts.map((alert, i) => (
+              {(event.alerts.length ? event.alerts : [-1]).map((alert, i) => (
                 <div className="inline-input" key={i}>
                   <select
                     aria-label={`Rappel ${i + 1}`}
                     value={alert}
-                    onChange={(e) =>
-                      update(
-                        "alerts",
-                        event.alerts.map((a, index) =>
-                          index === i ? Number(e.target.value) : a,
-                        ),
-                      )
-                    }
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      update("alerts", value < 0
+                        ? event.alerts.filter((_, index) => index !== i)
+                        : event.alerts.length
+                          ? event.alerts.map((a, index) => index === i ? value : a)
+                          : [value]);
+                    }}
                   >
-                    {!ALERTS.some((a) => a.value === alert) && (
+                    <option value={-1}>Aucun</option>
+                    {alert >= 0 && !ALERTS.some((a) => a.value === alert) && (
                       <option value={alert}>{alert} minutes avant</option>
                     )}
                     {ALERTS.map((a) => (
@@ -478,7 +479,7 @@ export function EventEditor({
                       </option>
                     ))}
                   </select>
-                  <button
+                  {alert >= 0 && <button
                     className="icon-button"
                     type="button"
                     aria-label={`Supprimer le rappel ${i + 1}`}
@@ -490,10 +491,10 @@ export function EventEditor({
                     }
                   >
                     <Trash2 size={16} />
-                  </button>
+                  </button>}
                 </div>
               ))}
-              {event.alerts.length < 10 &&
+              {event.alerts.length > 0 && event.alerts.length < 10 &&
                 ALERTS.some((item) => !event.alerts.includes(item.value)) && (
                   <button
                     type="button"
@@ -510,7 +511,7 @@ export function EventEditor({
                 )}
               <p className="field-hint">
                 Inclus dans le fichier .ics. Pour être averti quand Tempo est
-                fermé, importez l’événement dans Calendrier Apple.
+                fermé, utilisez l’abonnement ou importez l’événement dans Calendrier Apple.
               </p>
             </div>
             <label className="field">

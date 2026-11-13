@@ -13,12 +13,14 @@
       content="Tempo, votre calendrier personnel. Organisez vos semaines de travail, événements et documents, même hors connexion."
     />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>Tempo — Calendrier</title>
   </head>
   <body>
+    <div class="status-bar-surface" aria-hidden="true"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

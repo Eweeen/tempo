@@ -142,6 +142,8 @@ describe('stockage local et sauvegardes', () => {
     const files = await saveAttachments('shift-1', [new File(['Billet récent'], 'recent.txt')]);
     first.events = [event({ attachmentIds: files.map(file => file.id) })];
     await saveData(first);
+    // Publication can read the latest events without blessing this stale editor.
+    expect((await other.loadData(false)).events).toEqual(first.events);
     await expect(other.saveData({ ...stale, settings: { ...stale.settings, theme: 'dark' } })).rejects.toMatchObject({ name: 'StorageConflictError' });
     // Retrying does not silently adopt the new revision; the user must reload.
     await expect(other.saveData(stale)).rejects.toThrow('Rechargez Tempo');

@@ -1,17 +1,17 @@
 # Cahier des charges — Calendrier personnel
 
-Version : 0.3 — 13 novembre 2026. Document de référence du projet ; l’état réel de réalisation figure dans [AVANCEMENT.md](./AVANCEMENT.md) et les instructions de démarrage dans [README.md](./README.md).
+Version : 0.4 — 13 novembre 2026. Document de référence du projet ; les instructions de démarrage et de validation figurent dans [README.md](./README.md).
 
 ## 1. Problème et objectif
 
 La saisie de périodes de travail variables dans Calendrier Apple oblige à répéter les mêmes informations jour après jour. L’application doit permettre de préparer une semaine en une seule action, tout en conservant des événements indépendants : par exemple, cinq postes de 05 h à 13 h du lundi au vendredi, puis cinq postes de 13 h à 21 h la semaine suivante.
 
-Elle réunit également les autres événements personnels, leurs catégories, leurs rappels et leurs documents. Les données restent sur l’appareil. L’interface, en français, reprend les conventions familières d’un calendrier Apple, avec un thème clair, sombre ou lié au système.
+Elle réunit également les autres événements personnels, leurs catégories, leurs rappels et leurs documents. Les données restent sur l’appareil ; l’abonnement Apple facultatif publie une copie des événements sans documents. L’interface, en français, reprend les conventions familières d’un calendrier Apple, avec un thème clair, sombre ou lié au système.
 
 ## 2. Décisions confirmées par l’utilisateur
 
 - **PWA d’abord**, installable depuis le navigateur, avec **import et export de fichiers de calendrier `.ics`** pour la première version.
-- La synchronisation directe avec Calendrier Apple n’est pas une condition de cette première version. Elle reste un objectif d’évolution nécessitant une étude native.
+- Ajouter un abonnement Apple en lecture seule : les changements dans Tempo sont publiés dans un flux privé, puis récupérés automatiquement par iOS à sa fréquence. La synchronisation bidirectionnelle reste une évolution distincte.
 - Zone des jours fériés : **Bretagne, France**, donc calendrier national de France métropolitaine.
 - Stockage local des données et, lorsque le navigateur le permet, des pièces jointes.
 - Création d’un fichier de cahier des charges et d’un second fichier de suivi des tâches.
@@ -99,9 +99,13 @@ Apple documente l’import d’un fichier `.ics` depuis Mail sur iPhone. L’ouv
 
 Sur Mac, Calendrier permet d’exporter un calendrier et d’importer un fichier `.ics`. Ce parcours fournit également un moyen d’obtenir un fichier à importer dans la PWA. Les archives Apple `.icbu` ne font pas partie du format pris en charge. [Guide Calendrier Apple sur Mac](https://support.apple.com/guide/calendar/import-or-export-calendars-icl1023/mac).
 
+### Abonnement en lecture seule
+
+L’abonnement web ne nécessite pas EventKit : un service Node.js conserve le flux `.ics` après activation explicite. Il couvre ajouts, modifications et suppressions, avec identifiants stables, reprise après une modification hors connexion et révocation. La PWA ne publie pas lorsqu’elle est fermée. Le lien privé donne un accès en lecture seule ; la clé de publication reste distincte. Les documents restent locaux. L’interface indique le délai de mise à jour décidé par Apple.
+
 ### Évolution native
 
-Apple fournit EventKit et EventKitUI aux applications natives pour accéder aux calendriers avec les autorisations adaptées. Le choix technique de la V1 est donc de ne pas présenter de bouton fictif « connecter Calendrier Apple ». Une future application iOS, éventuellement avec un pont natif, devra étudier les autorisations, les identifiants d’événements, les conflits et la propagation des suppressions. [Documentation Apple EventKit](https://developer.apple.com/documentation/eventkit/accessing-calendar-using-eventkit-and-eventkitui).
+Apple fournit EventKit et EventKitUI aux applications natives pour accéder aux calendriers avec les autorisations adaptées. Une future application iOS, éventuellement avec un pont natif, devra étudier les autorisations, les identifiants d’événements, les conflits et la propagation bidirectionnelle des suppressions. [Documentation Apple EventKit](https://developer.apple.com/documentation/eventkit/accessing-calendar-using-eventkit-and-eventkitui).
 
 ## 5. Rappels et fonctionnement hors connexion
 
@@ -116,7 +120,7 @@ Après un premier chargement réussi et l’activation du cache, la PWA doit se 
 ## 6. Stockage et confidentialité
 
 - Base **IndexedDB** pour les événements, catégories, réglages et documents binaires.
-- Aucun compte, serveur de données personnelles ou service de synchronisation dans cette version.
+- Aucun compte requis. Un serveur conserve uniquement les copies `.ics` des abonnements activés explicitement ; sans activation, aucune donnée personnelle n’est envoyée.
 - Les fichiers sont copiés dans l’espace privé du site ; cela ne correspond pas à un dossier directement visible dans l’application Fichiers.
 - Demande de stockage persistant lorsque l’API est disponible et affichage de l’espace utilisé estimé.
 - Les quotas et l’attribution du mode persistant sont décidés par le navigateur. La suppression des données du site ou de l’installation peut supprimer les données locales : la sauvegarde exportée est le mécanisme de récupération prévu. [WebKit — politique de stockage](https://webkit.org/blog/14403/updates-to-storage-policy/).
@@ -156,6 +160,8 @@ La zone Bretagne utilise les jours fériés nationaux du cas général : dates f
 14. Ouvrir une journée, choisir une autre date dans la semaine, puis franchir la limite du dimanche. Vérifier la mise à jour de la semaine, le retour aux mois sans date grisée, puis le retour à l’année et l’ouverture d’un mois choisi.
 15. Vérifier le menu d’affichage à côté de la recherche, le passage calendrier/liste et l’absence d’effets de survol sur mobile.
 16. Faire défiler les années dans les deux sens sans saut au chargement, revenir à l’année actuelle avec « Aujourd’hui », choisir un mois d’une autre année puis revenir à celle-ci. Vérifier les dates d’une année bissextile et l’absence de lettres des jours dans les mini-calendriers.
+17. Choisir « Aucun » dans un événement, enregistrer et rouvrir : aucun rappel ne doit être exporté. Pouvoir rétablir un rappel ensuite.
+18. Activer l’abonnement, ajouter/modifier/supprimer des événements, couper puis rétablir le réseau, et vérifier le flux avec le même lien. Révoquer le lien et vérifier qu’il ne permet plus la lecture, même après une ancienne requête retardée.
 
 ## 10. Évolutions identifiées
 

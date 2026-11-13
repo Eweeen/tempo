@@ -169,7 +169,7 @@ async function compareAndWrite(
   knownRevision = revision;
 }
 
-export async function loadData(): Promise<AppData> {
+export async function loadData(trackRevision = true): Promise<AppData> {
   const db = await openDatabase();
   try {
     const tx = db.transaction("state", "readonly");
@@ -180,7 +180,8 @@ export async function loadData(): Promise<AppData> {
       done,
     ]);
     const data = stored === undefined ? initialData() : validateData(stored);
-    knownRevision = readRevision(revision);
+    // Background publication must not acknowledge revisions unseen by the editor.
+    if (trackRevision) knownRevision = readRevision(revision);
     return data;
   } finally {
     db.close();

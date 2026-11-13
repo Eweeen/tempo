@@ -76,6 +76,7 @@ describe('offline application shell', () => {
     const respondWith = vi.fn();
     for (const request of [
       { url: 'https://tempo.example/api/events', method: 'GET', mode: 'cors' },
+      { url: 'https://tempo.example/api/calendars/private.ics', method: 'GET', mode: 'navigate' },
       { url: 'https://tempo.example/documents/ticket.pdf', method: 'GET', mode: 'cors' },
       { url: 'https://tempo.example/index.html', method: 'POST', mode: 'cors' },
       { url: 'https://other.example/index.html', method: 'GET', mode: 'cors' },

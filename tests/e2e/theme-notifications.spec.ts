@@ -30,6 +30,9 @@ for (const mobile of [false, true]) {
         await expect(page.locator(surface)).toHaveCSS('background-color', theme.bg);
       }
       await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', theme.id === 'dark' ? '#0e0e10' : '#fff');
+      await expect(page.locator('.status-bar-surface')).toHaveCSS('background-color', theme.bg);
+      await expect(page.locator('.status-bar-surface')).toHaveCSS('position', 'fixed');
+      await expect(page.locator('meta[name="apple-mobile-web-app-status-bar-style"]')).toHaveAttribute('content', 'default');
       await expect(dialog).toHaveCSS('background-color', theme.bg);
       await expect(dialog.getByRole('combobox', { name: 'Rappel par défaut', exact: true })).toHaveCSS('background-color', theme.soft);
       const toast = dialog.locator('.toast');

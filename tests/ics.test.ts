@@ -7,6 +7,20 @@ const wrap = (lines: string) => `BEGIN:VCALENDAR\r\nVERSION:2.0\r\n${lines}\r\nE
 const simple = (extra = '') => `BEGIN:VEVENT\r\nUID:source@example.com\r\nDTSTART;TZID=Europe/Paris:20261109T050000\r\nDTEND;TZID=Europe/Paris:20261109T130000\r\nSUMMARY:Travail\r\n${extra}\r\nEND:VEVENT`;
 
 describe('iCalendar export and import', () => {
+  it('exports stable subscription revisions and preserves an explicit absence of reminders', () => {
+    const original = fixture({ alerts: [], allDay: true, start: '2026-11-09T00:00', end: '2026-11-10T00:00', recurrence: { frequency: 'weekly', interval: 1 } });
+    const calendar = exportCalendar([original], true);
+    expect(calendar).toBe(exportCalendar([original], true));
+    expect(calendar).toContain('X-WR-CALNAME:Tempo');
+    expect(calendar).toContain('LAST-MODIFIED:20260101T000000Z');
+    expect(calendar).not.toContain('METHOD:');
+    expect(calendar).not.toContain('VALARM');
+    expect(calendar).not.toContain('ATTACH');
+    expect(parseCalendar(calendar).events[0].recurrence.frequency).toBe('weekly');
+    const updated = exportCalendar([{ ...original, updatedAt: '2026-11-13T12:00:00Z' }], true);
+    expect(updated).toContain('LAST-MODIFIED:20261113T120000Z');
+    expect(updated).toContain(`UID:${original.uid}`);
+  });
   it('resolves ambiguous and nonexistent Paris times according to RFC 5545', () => {
     expect(new Date(wallToUTC('2026-10-25T02:30', 'Europe/Paris')).toISOString()).toBe('2026-10-25T00:30:00.000Z');
     expect(new Date(wallToUTC('2026-03-29T02:30', 'Europe/Paris')).toISOString()).toBe('2026-03-29T01:30:00.000Z');
