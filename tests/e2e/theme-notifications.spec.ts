@@ -26,9 +26,10 @@ for (const mobile of [false, true]) {
       await dialog.getByRole('button', { name: theme.label, exact: true }).click();
       await dialog.getByRole('button', { name: 'Enregistrer les préférences', exact: true }).click();
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme.id);
-      for (const surface of ['html', 'body', '#root', '.app-shell']) {
+      for (const surface of ['html', 'body', '#root', '.app-shell', '.calendar-toolbar', '.calendar-bottom-bar']) {
         await expect(page.locator(surface)).toHaveCSS('background-color', theme.bg);
       }
+      await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', theme.id === 'dark' ? '#0e0e10' : '#fff');
       await expect(dialog).toHaveCSS('background-color', theme.bg);
       await expect(dialog.getByRole('combobox', { name: 'Rappel par défaut', exact: true })).toHaveCSS('background-color', theme.soft);
       const toast = dialog.locator('.toast');

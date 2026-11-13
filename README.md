@@ -90,6 +90,8 @@ Le service worker de production précharge la page, le JavaScript, les styles, l
 
 Une mise à jour attend la fermeture des onglets et fenêtres Tempo utilisant l’ancienne version. Fermer toutes les instances puis rouvrir l’application permet de passer à la nouvelle version sans mélanger ses fichiers avec ceux de la précédente.
 
+Les barres supérieure et inférieure ont un fond opaque assorti au thème, également communiqué par `theme-color`. Le manifeste utilise le blanc du thème initial. Le style Apple de barre d’état n’est pas forcé : [WebKit recommande de laisser iOS reprendre la couleur de la page](https://bugs.webkit.org/show_bug.cgi?id=317153#c2). Un [problème de barre système translucide est encore signalé sur iOS 27](https://bugs.webkit.org/show_bug.cgi?id=301994#c17) ; ces réglages web ne garantissent pas la suppression de cet effet natif. Le rendu de la PWA sur iOS 27.0.1 reste à vérifier sur un iPhone réel après mise à jour et relance complète.
+
 ## Échanger avec Calendrier Apple
 
 Dans **Calendriers → Importer ou exporter**, exporter les événements en `.ics`. Apple documente l’import depuis une pièce jointe dans **Mail sur iPhone** ; Calendrier sur Mac permet également d’importer et d’exporter des fichiers `.ics`. L’ouverture directe d’un téléchargement depuis Safari ou Fichiers et l’import de plusieurs événements doivent être vérifiés sur l’iPhone concerné. [Guide Apple iPhone](https://support.apple.com/fr-fr/guide/iphone/ipha0d932e96/ios), [guide Calendrier sur Mac](https://support.apple.com/guide/calendar/import-or-export-calendars-icl1023/mac).
