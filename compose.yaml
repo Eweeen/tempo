@@ -1,0 +1,11 @@
+services:
+  tempo:
+    image: tempo-calendar:local
+    build:
+      context: .
+    ports:
+      - "${TEMPO_BIND_ADDRESS:-127.0.0.1}:${TEMPO_PORT:-8080}:8080"
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777

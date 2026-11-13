@@ -1,0 +1,13 @@
+.git
+.agents
+.codex
+.aws
+node_modules
+dist
+test-results
+playwright-report
+coverage
+*.tsbuildinfo
+*.log
+.env*
+**/.env*

@@ -1,0 +1,32 @@
+{
+  "id": "/",
+  "name": "Tempo — Votre calendrier personnel",
+  "short_name": "Tempo",
+  "description": "Vos événements, vos semaines de travail et vos documents, même hors connexion.",
+  "lang": "fr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fffaf3",
+  "theme_color": "#ed5656",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
