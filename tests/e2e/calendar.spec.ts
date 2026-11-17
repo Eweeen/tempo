@@ -16,12 +16,13 @@ async function chooseDisplay(page: Page, name: string) {
   await page.getByRole('menuitemradio', { name, exact: true }).click();
 }
 
-async function createWorkWeek(page: Page) {
+async function createWorkWeek(page: Page, address?: string) {
   await openWorkPlanner(page);
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Semaine du lundi').fill('2026-11-09');
   await dialog.getByRole('button', { name: /Du matin/ }).click();
   await dialog.getByLabel('Titre', { exact: true }).fill('Travail du matin');
+  if (address) await dialog.getByLabel('Adresse (facultatif)', { exact: true }).fill(address);
   await dialog.getByRole('combobox', { name: 'Rappel', exact: true }).selectOption('30');
   await expect(dialog.getByText('5 événements à créer', { exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: 'Ajouter ma semaine' }).click();
@@ -38,8 +39,8 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByRole('dialog')).toHaveCount(0);
 });
 
-test('creates five independent morning shifts, prevents duplicates and exports reminders', async ({ page }, testInfo) => {
-  await createWorkWeek(page);
+test('creates five independent morning shifts, prevents duplicates and exports addresses and reminders', async ({ page }, testInfo) => {
+  await createWorkWeek(page, '  12 rue de la Gare, Rennes  ');
   await expect(page.locator('.month-grid .event-chip')).toHaveCount(5);
   await expect(page.locator('.month-grid .event-chip').first()).toContainText('05h00');
   await page.screenshot({ path: testInfo.outputPath('desktop.png'), fullPage: true });
@@ -67,7 +68,11 @@ test('creates five independent morning shifts, prevents duplicates and exports r
   expect(calendar).toContain('TRIGGER:-PT30M');
   expect(calendar).toContain('DTSTART;TZID=Europe/Paris:20261109T050000');
   expect(calendar).toContain('DTEND;TZID=Europe/Paris:20261113T130000');
+  expect(calendar.match(/^LOCATION:12 rue de la Gare\\, Rennes\r?$/gm)).toHaveLength(5);
   expect(new Set([...calendar.matchAll(/^UID:(.*)$/gm)].map(match => match[1])).size).toBe(5);
+  await page.reload();
+  await page.locator('.month-grid .event-chip').first().click();
+  await expect(page.getByLabel('Lieu', { exact: true })).toHaveValue('12 rue de la Gare, Rennes');
 });
 
 test('edits one shift, keeps document bytes after reload and deletes only that event', async ({ page }) => {
@@ -170,6 +175,7 @@ test('remains usable at 390px without page or dialog overflow', async ({ page },
   expect(dialogBounds!.x).toBeGreaterThanOrEqual(0);
   expect(dialogBounds!.x + dialogBounds!.width).toBeLessThanOrEqual(391);
   await page.getByLabel('Titre', { exact: true }).fill('Travail mobile');
+  await page.getByLabel('Adresse (facultatif)', { exact: true }).fill('8 rue du Port, Brest');
   await page.getByRole('button', { name: 'Ajouter ma semaine' }).click();
   await expect(page.getByRole('dialog')).toBeHidden();
   await page.screenshot({ path: testInfo.outputPath('mobile-month.png'), fullPage: true });
@@ -178,6 +184,7 @@ test('remains usable at 390px without page or dialog overflow', async ({ page },
   await expect(page.getByRole('button', { name: 'Semaine', exact: true })).toHaveCount(0);
   await page.locator('.day-page[data-active="true"] .timed-event').click();
   await expect(page.getByLabel('Titre de l’événement')).toHaveValue('Travail mobile');
+  await expect(page.getByLabel('Lieu', { exact: true })).toHaveValue('8 rue du Port, Brest');
   await page.getByRole('button', { name: 'Fermer', exact: true }).click();
   await page.getByRole('button', { name: 'Revenir aux mois', exact: true }).click();
   await chooseDisplay(page, 'Liste');

@@ -229,6 +229,7 @@ export interface WorkEventsOptions {
   startTime: string;
   endTime: string;
   title: string;
+  location?: string;
   categoryId: string;
   icon: string;
   alerts: number[];
@@ -270,7 +271,7 @@ export function buildWorkEvents(options: WorkEventsOptions): CalendarEvent[] {
         allDay: false,
         categoryId: options.categoryId,
         icon: options.icon,
-        location: "",
+        location: options.location?.trim() || "",
         notes: "",
         url: "",
         availability: "busy",

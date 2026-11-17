@@ -1,11 +1,6 @@
-import {
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useMemo, type CSSProperties } from "react";
 import { Plus } from "lucide-react";
+import { useCalendarWindow } from "../hooks/useCalendarWindow";
 import type { CalendarEvent, Category, Settings } from "../types";
 import {
   dateKey,
@@ -42,10 +37,6 @@ interface Props {
   onEdit: (event: CalendarEvent) => void;
   onCreate: (date: Date) => void;
 }
-
-type ScrollTarget =
-  | { kind: "month"; index: number }
-  | { kind: "anchor"; index: number; offset: number };
 
 function MonthSection({ month, ...props }: Props & { month: Date }) {
   const cells = useMemo(() => monthCells(month), [+month]);
@@ -186,84 +177,15 @@ function MonthSection({ month, ...props }: Props & { month: Date }) {
 /** Bidirectional month window: retain nine months and preserve the visible anchor. */
 export function MonthCalendar(props: Props) {
   const { continuous, date, navigationKey, onVisibleMonth } = props;
-  const [firstMonth, setFirstMonth] = useState(() => monthIndex(date) - 4);
-  const scroller = useRef<HTMLDivElement>(null);
-  const pending = useRef<ScrollTarget | null>({
-    kind: "month",
+  const { firstIndex: firstMonth, scrollProps } = useCalendarWindow({
     index: monthIndex(date),
+    navigationKey,
+    enabled: continuous,
+    size: WINDOW_SIZE,
+    step: WINDOW_STEP,
+    attribute: "data-month",
+    onVisibleIndex: (index) => onVisibleMonth(monthAt(index)),
   });
-  const lastNavigation = useRef(navigationKey);
-  const lastVisible = useRef(monthIndex(date));
-  const frame = useRef(0);
-  const visibleCallback = useRef(onVisibleMonth);
-  visibleCallback.current = onVisibleMonth;
-
-  useLayoutEffect(() => {
-    if (lastNavigation.current === navigationKey) return;
-    lastNavigation.current = navigationKey;
-    pending.current = { kind: "month", index: monthIndex(date) };
-    setFirstMonth(monthIndex(date) - 4);
-  }, [navigationKey, date]);
-
-  useLayoutEffect(() => {
-    const container = scroller.current;
-    const target = pending.current;
-    if (!continuous || !container || !target) return;
-    if (target.kind === "month" && firstMonth !== target.index - 4) return;
-    const element = container.querySelector<HTMLElement>(
-      `[data-month="${target.index}"]`,
-    );
-    if (!element) return;
-    container.scrollTop +=
-      element.getBoundingClientRect().top -
-      container.getBoundingClientRect().top -
-      (target.kind === "anchor" ? target.offset : 0);
-    pending.current = null;
-  }, [firstMonth, navigationKey, continuous]);
-
-  useLayoutEffect(() => () => cancelAnimationFrame(frame.current), []);
-
-  const handleScroll = () => {
-    if (!continuous || frame.current) return;
-    frame.current = requestAnimationFrame(() => {
-      frame.current = 0;
-      const container = scroller.current;
-      if (!container || pending.current) return;
-      const top = container.getBoundingClientRect().top;
-      const sections = [
-        ...container.querySelectorAll<HTMLElement>("[data-month]"),
-      ];
-      const anchor = sections.find(
-        (node) => node.getBoundingClientRect().bottom > top + 1,
-      );
-      const visible = sections.find(
-        (node) => node.getBoundingClientRect().bottom > top + 60,
-      );
-      if (!anchor || !visible) return;
-      const index = Number(visible.dataset.month);
-      if (index !== lastVisible.current) {
-        lastVisible.current = index;
-        visibleCallback.current(monthAt(index));
-      }
-      const threshold = container.clientHeight;
-      const shift =
-        container.scrollTop < threshold
-          ? -WINDOW_STEP
-          : container.scrollHeight -
-                container.scrollTop -
-                container.clientHeight <
-              threshold
-            ? WINDOW_STEP
-            : 0;
-      if (!shift) return;
-      pending.current = {
-        kind: "anchor",
-        index: Number(anchor.dataset.month),
-        offset: anchor.getBoundingClientRect().top - top,
-      };
-      setFirstMonth((previous) => previous + shift);
-    });
-  };
 
   const months = continuous
     ? Array.from({ length: WINDOW_SIZE }, (_, index) =>
@@ -283,8 +205,7 @@ export function MonthCalendar(props: Props) {
       </div>
       <div
         className="months-scroll"
-        ref={scroller}
-        onScroll={handleScroll}
+        {...scrollProps}
         aria-label={continuous ? "Mois défilants" : "Mois"}
         tabIndex={continuous ? 0 : undefined}
       >

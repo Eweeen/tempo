@@ -28,6 +28,7 @@ export function WorkPlanner({
   const [startTime, setStartTime] = useState("05:00");
   const [endTime, setEndTime] = useState("13:00");
   const [title, setTitle] = useState("Travail");
+  const [location, setLocation] = useState("");
   const [alert, setAlert] = useState(data.settings.defaultAlert);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,6 +42,7 @@ export function WorkPlanner({
         startTime,
         endTime,
         title,
+        location,
         categoryId: workCategory.id,
         icon: "",
         alerts: alert < 0 ? [] : [alert],
@@ -55,6 +57,7 @@ export function WorkPlanner({
     startTime,
     endTime,
     title,
+    location,
     workCategory.id,
     alert,
     data.settings.timezone,
@@ -246,6 +249,18 @@ export function WorkPlanner({
                   onChange={(e) => setTitle(e.target.value)}
                 />
               </label>
+              <label className="field">
+                Adresse (facultatif)
+                <input
+                  placeholder="Une adresse, une salle…"
+                  maxLength={2000}
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                />
+              </label>
+              <p className="field-hint">
+                Cette adresse s’applique à tous les jours sélectionnés.
+              </p>
               <label className="field">
                 Rappel
                 <select

@@ -11,15 +11,19 @@ const calendar = [
 ].map(([uid, title, start, end]) => ['BEGIN:VEVENT', `UID:${uid}@mobile.test`, `SUMMARY:${title}`, `DTSTART;TZID=Europe/Paris:${start}`, `DTEND;TZID=Europe/Paris:${end}`, 'END:VEVENT'].join('\r\n'));
 const fixture = ['BEGIN:VCALENDAR', 'VERSION:2.0', ...calendar, 'BEGIN:VEVENT', 'UID:birthday@mobile.test', 'SUMMARY:Anniversaire', 'DTSTART;VALUE=DATE:20261110', 'DTEND;VALUE=DATE:20261111', 'END:VEVENT', 'END:VCALENDAR', ''].join('\r\n');
 
-async function swipe(page: Page, start: { x: number; y: number }, end: { x: number; y: number }) {
+async function swipe(page: Page, start: { x: number; y: number }, end: { x: number; y: number }, beforeRelease?: () => Promise<void>) {
   const session = await page.context().newCDPSession(page);
   await session.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ ...start, id: 1 }] });
   for (let step = 1; step <= 10; step++) {
     await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: start.x + (end.x - start.x) * step / 10, y: start.y + (end.y - start.y) * step / 10, id: 1 }] });
     await page.evaluate(() => new Promise(requestAnimationFrame));
   }
-  await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  await session.detach();
+  try {
+    await beforeRelease?.();
+  } finally {
+    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await session.detach();
+  }
 }
 
 test.beforeEach(async ({ page }) => {
@@ -33,6 +37,53 @@ test.beforeEach(async ({ page }) => {
   await expect(page.getByText('Événements importés.', { exact: true })).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: 'Fermer', exact: true }).last().click();
 });
+
+for (const view of ['months', 'years'] as const) {
+  test(`keeps ${view} stable while a finger crosses the window boundary and after release`, async ({ page }) => {
+    if (view === 'years') await page.getByRole('button', { name: 'Revenir à l’année', exact: true }).click();
+    const scroll = page.getByLabel(view === 'months' ? 'Mois défilants' : 'Années défilantes', { exact: true });
+    const attribute = view === 'months' ? 'data-month' : 'data-year';
+    const step = view === 'months' ? 3 : 2;
+    for (const { direction, hold } of [{ direction: 1, hold: true }, { direction: -1, hold: true }, { direction: 1, hold: false }]) {
+      const first = Number(await scroll.locator(`[${attribute}]`).first().getAttribute(attribute));
+      // Start outside the recycling threshold, then cross it with a real touch gesture.
+      await scroll.evaluate((el, direction) => {
+        el.scrollTop = direction > 0 ? el.scrollHeight - el.clientHeight * 2 - 100 : el.clientHeight + 100;
+      }, direction);
+      let anchor: { index: string; offset: number };
+      await swipe(page,
+        { x: 200, y: direction > 0 ? 610 : 270 },
+        { x: 200, y: direction > 0 ? 270 : 610 },
+        hold ? async () => {
+          // Hold the finger still: neither the DOM window nor its visible dates may jump.
+          await scroll.evaluate(() => new Promise(resolve => setTimeout(resolve, 250)));
+          await expect(scroll.locator(`[${attribute}]`).first()).toHaveAttribute(attribute, String(first));
+          anchor = await scroll.evaluate((el, attribute) => {
+            const top = el.getBoundingClientRect().top;
+            const node = [...el.querySelectorAll<HTMLElement>(`[${attribute}]`)].find(node => node.getBoundingClientRect().bottom > top + 1)!;
+            return { index: node.getAttribute(attribute)!, offset: node.getBoundingClientRect().top - top };
+          }, attribute);
+        } : undefined,
+      );
+      await expect(scroll.locator(`[${attribute}]`).first()).toHaveAttribute(attribute, String(first + direction * step));
+      if (hold) {
+        const expectedAnchor = scroll.locator(`[${attribute}="${anchor!.index}"]`);
+        await expect.poll(() => expectedAnchor.evaluate(el => el.getBoundingClientRect().top - el.parentElement!.getBoundingClientRect().top)).toBeCloseTo(anchor!.offset, 0);
+      }
+      // Observe multiple idle frames to catch a correction that starts another automatic shift.
+      const positions = await scroll.evaluate(async (el, attribute) => {
+        const samples = [];
+        for (let frame = 0; frame < 45; frame++) {
+          await new Promise(requestAnimationFrame);
+          samples.push({ first: el.firstElementChild!.getAttribute(attribute), top: el.scrollTop });
+        }
+        return samples;
+      }, attribute);
+      expect(new Set(positions.map(position => position.first)).size).toBe(1);
+      expect(Math.max(...positions.map(position => position.top)) - Math.min(...positions.map(position => position.top))).toBeLessThan(2);
+    }
+  });
+}
 
 test('shows three previews, opens a full day and swipes between days without blocking vertical scroll', async ({ page }, testInfo) => {
   await expect(page.getByRole('button', { name: 'Semaine', exact: true })).toHaveCount(0);
